@@ -1,0 +1,11 @@
+[{:itonami.blueprint/social-impact [:forest-health :carbon-sequestration :pest-management :fire-risk-mitigation]
+  :itonami.blueprint/domain :forestry/technical-support
+  :itonami.blueprint/required-technologies [:identity :forms :dmn :bpmn :audit-ledger]
+  :itonami.blueprint/isco-08 "3143"
+  :itonami.blueprint/name "Forestry Technicians"
+  :itonami.blueprint/governor :forestry-technician-governor
+  :itonami.blueprint/robotics false
+  :db/id -1
+  :itonami.blueprint/status :public-oss
+  :itonami.blueprint/id "cloud-itonami-isco-3143"
+  :itonami.blueprint/license "AGPL-3.0-or-later"}]
