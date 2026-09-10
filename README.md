@@ -48,15 +48,15 @@ human-in-the-loop interrupt/resume via checkpointing.
                                            +-> :hold               (:hard? true)
 ```
 
-- `src/forestry_technician/store.cljc` — `Store` protocol + `MemStore`:
+- `src/forestry_technician/store.kotoba` — `Store` protocol + `MemStore`:
   registered technicians, forest stands, technical records, an append-only audit ledger.
-- `src/forestry_technician/technician.cljc` — `Technician` protocol;
+- `src/forestry_technician/technician.kotoba` — `Technician` protocol;
   `mock-technician` (deterministic, default) proposes a technical action from a
   request; `llm-technician` wraps a `langchain.model/ChatModel` — either
   way the technician only ever produces a `:propose`-effect proposal,
   never a committed record, and LLM parse failures always yield
   `:confidence 0.0` (forces escalation, never fabricated confidence).
-- `src/forestry_technician/governor.cljc` — `TechnicianGovernor/check`: a pure
+- `src/forestry_technician/governor.kotoba` — `TechnicianGovernor/check`: a pure
   function, wired as its own `:govern` node. Hard invariants
   (unregistered technician, unregistered forest, a proposal whose `:effect`
   isn't `:propose`) always route to `:hold`. Escalation invariants
@@ -66,7 +66,7 @@ human-in-the-loop interrupt/resume via checkpointing.
   on explicit human approval (`actor/approve!`), matching the premise
   that pest/disease/wildfire risks and scheduled site visits
   always require human sign-off.
-- `src/forestry_technician/actor.cljc` — `build-graph`, `run-request!`,
+- `src/forestry_technician/actor.kotoba` — `build-graph`, `run-request!`,
   `approve!`: the `langgraph.graph/state-graph` wiring itself.
 
 ## Proposal Operations
