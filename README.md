@@ -79,7 +79,7 @@ human-in-the-loop interrupt/resume via checkpointing.
 ## Testing
 
 ```bash
-clojure -M:test
+kbb -M:test
 ```
 
 This is what backs this repo's `:maturity :implemented` entry in
