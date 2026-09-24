@@ -82,3 +82,14 @@
     (store/append-ledger! st {:disposition :commit})
     (is (= 1 (count (store/records-of st "forest-1"))))
     (is (= 1 (count (store/ledger st))))))
+
+(deftest hard-violation-holds-rather-than-escalating
+  ;; An escalating op from an unregistered technician must not reach the
+  ;; human approval queue: the docstring's HARD invariants ALWAYS :hold, so
+  ;; the verdict names the violation and does not also ask for sign-off.
+  (let [st (fresh-store)
+        proposal {:op :flag-pest-disease-risk :effect :propose :confidence 0.9 :stake :high}
+        v (governor/check {:technician-id "no-such-tech" :forest-id "forest-1"} {} proposal st)]
+    (is (:hard? v))
+    (is (not (:escalate? v)))
+    (is (not (:ok? v)))))

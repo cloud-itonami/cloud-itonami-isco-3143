@@ -1,0 +1,137 @@
+(ns forestry-technician.run-tests
+  "Load this actor's .kotoba sources and run its clojure.test suite,
+  refusing to report a pass on a run that came in under what the
+  README publishes.
+
+  ## Why this file exists
+
+  The .clj/.cljc -> .kotoba rename left deps.edn running
+  cognitect.test-runner, which resolves only .clj/.cljc. After the kbb
+  cutover the same alias reported, measured on 8aef9af:
+
+      $ kbb -M:test
+      kbb test: 0 test namespace(s) found          # exit 1
+
+  i.e. the tests in test/ had not run since the rename. A suite that
+  ran nothing must not be confusable with one that ran everything and
+  found no fault (ADR-2608136000, questions 1, 2 and 7). Ported from
+  cloud-itonami-isco-2163's run_tests.kotoba (the JVM-reader runner of
+  isco-2523 / 3133 does not load on the kbb engine). This runner:
+
+    1. discovers every .kotoba under src/ and test/ and loads them in
+       require order (the engine does not resolve .kotoba by name, so
+       `require` alone cannot find them);
+    2. runs every namespace ending in `-test`;
+    3. REFUSES (exit 2, never 0) when it found no sources, no test
+       namespaces, or ran fewer tests/assertions than README.md
+       publishes. The floor is 'not below the published count', not
+       'more than zero' -- dropping the published count is itself a
+       refusal, because a floor that silently becomes 0 is no floor.
+
+  Exit codes: 0 = green and at/above the floor, 1 = failures/errors,
+  2 = refused (could not honestly say). Green marker: `forestry-technician: OK`.
+
+  Host-profile runner: it reads the filesystem via node:fs, which is a
+  mechanism layer (no admission/validation logic lives here)."
+  (:require ["node:fs" :as fs]
+            ["node:path" :as path]
+            [edamame.core :as edamame]
+            [clojure.test :as t]
+            [kotoba.lang.text :as str]
+            [nbb.core :refer [load-file]]
+            [promesa.core :as p]
+            ;; Library namespaces the sources require. Loaded here so the
+            ;; per-file load-file below never has to resolve them lazily.
+            [langgraph.graph]
+            [langgraph.checkpoint]))
+
+(def source-ext #{"kotoba"})
+
+(defn- refuse! [why]
+  (println (str "REFUSING TO REPORT A PASS: " why))
+  (js/process.exit 2))
+
+(defn- walk [dir]
+  (if-not (fs/existsSync dir)
+    []
+    (vec (mapcat (fn [e]
+                   (let [f (path/join dir (.-name e))]
+                     (if (.isDirectory e)
+                       (walk f)
+                       (when (source-ext (last (str/split (.-name e) #"\.")))
+                         [f]))))
+                 (fs/readdirSync dir #js {:withFileTypes true})))))
+
+(defn- ns-form
+  "The file's leading `(ns ...)` form as {:file :ns :requires}."
+  [file]
+  (let [form (edamame/parse-string (str (fs/readFileSync file "utf8"))
+                                    ;; technician.kotoba's ns form carries a
+                                    ;; #?(:clj .. :cljs ..) require; cljs.reader
+                                    ;; throws 'No reader function for tag ?'.
+                                    {:all true :read-cond :allow :features #{:cljs}})]
+    (when-not (and (seq? form) (= 'ns (first form)))
+      (refuse! (str file " does not start with an ns form")))
+    {:file file
+     :ns (second form)
+     :requires (set (for [clause (drop 2 form)
+                          :when (and (seq? clause) (= :require (first clause)))
+                          spec (rest clause)]
+                      (if (sequential? spec) (first spec) spec)))}))
+
+(defn- load-order
+  "Topologically order `infos` so every file loads after the local
+  namespaces it requires. A cycle is a refusal, not a guess."
+  [infos]
+  (let [local (set (map :ns infos))]
+    (loop [done [] loaded #{} todo infos]
+      (if (empty? todo)
+        done
+        (let [ready (filter #(every? (fn [r] (or (loaded r) (not (local r))))
+                                     (:requires %))
+                            todo)]
+          (when (empty? ready)
+            (refuse! (str "require cycle among " (pr-str (map :ns todo)))))
+          (recur (into done ready)
+                 (into loaded (map :ns ready))
+                 (remove (set ready) todo)))))))
+
+(defn- published-floor
+  "[tests assertions] as published in README.md, or a refusal."
+  []
+  (let [readme (when (fs/existsSync "README.md") (str (fs/readFileSync "README.md" "utf8")))
+        [_ n a] (when readme (re-find #"(\d+) tests / (\d+) assertions green" readme))]
+    (if n
+      [(js/parseInt n 10) (js/parseInt a 10)]
+      (refuse! "README.md publishes no '<n> tests / <m> assertions green' count"))))
+
+(defmethod t/report [::t/default :end-run-tests] [m]
+  (let [[floor-n floor-a] (published-floor)
+        ran-n (:test m)
+        ran-a (+ (:pass m) (:fail m) (:error m))]
+    (println (str "Ran " ran-n " tests containing " ran-a " assertions. "
+                  (:fail m) " failures, " (:error m) " errors."))
+    (cond
+      (pos? (+ (:fail m) (:error m)))
+      (js/process.exit 1)
+
+      (or (< ran-n floor-n) (< ran-a floor-a))
+      (refuse! (str "ran " ran-n " tests / " ran-a " assertions, below the "
+                    floor-n " / " floor-a " README.md publishes"))
+
+      :else
+      (do (println "forestry-technician: OK") (js/process.exit 0)))))
+
+(let [src (walk "src")
+      tst (walk "test")]
+  (when (empty? src) (refuse! "no sources found under src/"))
+  (let [infos (load-order (map ns-form (concat src tst)))
+        test-nses (filter #(str/ends-with? (name %) "-test") (map :ns infos))]
+    (when (empty? test-nses) (refuse! "no test namespaces found under test/"))
+    (-> (reduce (fn [acc {:keys [file]}] (p/then acc (fn [_] (load-file file))))
+                (p/resolved nil)
+                infos)
+        (p/then (fn [_] (apply t/run-tests test-nses)))
+        (p/catch (fn [e]
+                   (println "LOAD FAILED:" (ex-message e))
+                   (js/process.exit 1))))))
