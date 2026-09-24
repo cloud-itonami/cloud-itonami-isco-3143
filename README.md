@@ -82,7 +82,7 @@ human-in-the-loop interrupt/resume via checkpointing.
 kbb -M:test
 ```
 
-14 tests / 38 assertions green. `run_tests.kotoba` loads the `.kotoba`
+15 tests / 41 assertions green. `run_tests.kotoba` loads the `.kotoba`
 sources itself (cognitect.test-runner resolves only `.clj`/`.cljc` and
 found 0 test namespaces after the rename) and prints
 `forestry-technician: OK` only when the run is at or above that
