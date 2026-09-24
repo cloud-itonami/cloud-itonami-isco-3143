@@ -82,6 +82,13 @@ human-in-the-loop interrupt/resume via checkpointing.
 kbb -M:test
 ```
 
+14 tests / 38 assertions green. `run_tests.kotoba` loads the `.kotoba`
+sources itself (cognitect.test-runner resolves only `.clj`/`.cljc` and
+found 0 test namespaces after the rename) and prints
+`forestry-technician: OK` only when the run is at or above that
+published count. Running fewer, finding no sources, or this line losing
+its count is a refusal (exit 2), not a pass; failures exit 1.
+
 This is what backs this repo's `:maturity :implemented` entry in
 [`kotoba-lang/occupation`](https://github.com/kotoba-lang/occupation).
 

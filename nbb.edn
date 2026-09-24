@@ -1,0 +1,7 @@
+;; Declared HERE and not only in deps.edn: the kbb engine reads nbb.edn and
+;; does NOT resolve deps.edn :git/sha coordinates, so without this file
+;; `kbb -M:test` cannot load langgraph and the actor suite never runs.
+;; sha values are COPIED from deps.edn -- keep the two in step.
+{:paths ["src" "test"]
+ :deps {io.github.kotoba-lang/text {:git/sha "73bdb13ae7a3d004b44bca08be03a3191157a38f"}
+        io.github.kotoba-lang/langgraph {:git/sha "0567176c4ef0ebefd1c5c750beb22e3bafa4c824"}}}
